@@ -1,0 +1,60 @@
+id: research_team_sandbox
+name: Multi-Agent Research Team with Secure Sandbox
+description: >
+  A coordinated team of agents: a researcher that gathers info
+  and a coder that validates findings via safe code execution.
+persistent: true
+background: false
+agentos_enabled: false
+
+db:
+  provider: postgres
+  url: "${env:DATABASE_URL}"
+  table_prefix: yagno
+
+agents:
+  - id: researcher
+    name: Research Agent
+    model: openrouter:openai/gpt-4.1-mini
+    role: Research specialist who gathers and synthesizes information
+    tools: [web_search]
+    prompt_file: prompts/researcher.md
+    retries: 3
+    tool_call_limit: 10
+
+  - id: coder
+    name: Code Validator
+    model: openrouter:openai/gpt-4.1-mini
+    role: Software engineer who validates ideas with working code
+    tools: [sandbox]
+    instructions:
+      - "You can safely execute Python code in the Daytona sandbox."
+      - "Always test code before presenting it as a solution."
+    retries: 2
+
+teams:
+  - id: research_team
+    name: Research & Validation Team
+    role: Coordinate research and safe code validation
+    mode: coordinate
+    model: openrouter:openai/gpt-5.4
+    members: [researcher, coder]
+    instructions:
+      - "Delegate research to the researcher agent first."
+      - "Then ask the coder to validate any code-related findings."
+      - "Synthesize both outputs into a final answer."
+
+tools:
+  - id: web_search
+    kind: callable
+    entrypoint: yagno.tools.web.web_search
+
+  - id: sandbox
+    kind: sandbox
+    provider: daytona
+
+steps:
+  - id: research_step
+    name: Research & Validate
+    kind: team
+    team: research_team

@@ -1,0 +1,39 @@
+[project]
+name = "yagno"
+version = "1.2.0"
+description = "Minimal YAML config for production-grade long-running Agno agents, teams & workflows"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11"
+dependencies = [
+    "agno>=2.5.0",
+    "pydantic>=2.10",
+    "pyyaml>=6.0",
+    "python-dotenv>=1.0",
+    "openai>=1.0",
+    "sqlalchemy>=2.0",
+    "rich>=13.0",
+]
+
+[project.optional-dependencies]
+postgres = ["psycopg[binary]>=3.3"]
+tavily = ["tavily-python>=0.7.23"]
+finance = ["yfinance>=1.2.0"]
+sandbox = ["daytona"]
+knowledge = ["agno[pgvector]"]
+serve = ["fastapi>=0.100"]
+all = [
+    "psycopg[binary]>=3.3",
+    "tavily-python>=0.7.23",
+    "yfinance>=1.2.0",
+    "daytona",
+    "agno[pgvector]",
+    "fastapi>=0.100",
+]
+
+[project.scripts]
+yagno = "yagno.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

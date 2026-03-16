@@ -1,0 +1,22 @@
+id: simple_researcher
+name: Simple Research Agent
+description: A single agent that searches the web and reports findings.
+persistent: true
+
+agents:
+  - id: researcher
+    name: Researcher
+    model: openrouter:z-ai/glm-5-turbo
+    tools: [tavily_search]
+    prompt_file: prompts/researcher.md
+    markdown: true
+
+tools:
+  - id: tavily_search
+    kind: tavily
+    search_depth: advanced
+
+steps:
+  - id: research
+    kind: agent
+    agent: researcher

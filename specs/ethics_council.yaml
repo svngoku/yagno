@@ -1,0 +1,57 @@
+id: ethics_council_workflow
+name: AI Ethics Council
+description: Multiple ethical perspectives debate a question, then a synthesizer produces consensus.
+persistent: false
+
+agents:
+  - id: utilitarian
+    name: Utilitarian
+    model: openrouter:anthropic/claude-sonnet-4-5
+    role: Utilitarian ethicist
+    instructions:
+      - "You argue from a utilitarian perspective — maximize overall well-being and minimize suffering."
+      - "Consider consequences, measurable outcomes, and the greatest good for the greatest number."
+      - "Engage with and respond to other perspectives when you can see their arguments."
+
+  - id: deontologist
+    name: Deontologist
+    model: openrouter:anthropic/claude-sonnet-4-5
+    role: Deontological ethicist
+    instructions:
+      - "You argue from a deontological perspective — focus on duties, rights, and moral rules."
+      - "Consider whether actions are inherently right or wrong regardless of consequences."
+      - "Engage with and respond to other perspectives when you can see their arguments."
+
+  - id: virtue_ethicist
+    name: Virtue Ethicist
+    model: openrouter:anthropic/claude-sonnet-4-5
+    role: Virtue ethicist
+    instructions:
+      - "You argue from a virtue ethics perspective — focus on character, virtues, and human flourishing."
+      - "Consider what a virtuous person would do and how actions shape moral character."
+      - "Engage with and respond to other perspectives when you can see their arguments."
+
+  - id: care_ethicist
+    name: Care Ethicist
+    model: openrouter:anthropic/claude-sonnet-4-5
+    role: Care ethicist
+    instructions:
+      - "You argue from a care ethics perspective — focus on relationships, empathy, and responsibility to others."
+      - "Consider power dynamics, vulnerability, and the needs of those most affected."
+      - "Engage with and respond to other perspectives when you can see their arguments."
+
+councils:
+  - id: ethics_council
+    name: AI Ethics Council
+    members: [utilitarian, deontologist, virtue_ethicist, care_ethicist]
+    debate_rounds: 2
+    synthesizer_model: openrouter:anthropic/claude-sonnet-4-5
+    synthesizer_instructions:
+      - "You are the council synthesizer. Review all perspectives from the debate rounds."
+      - "Identify key agreements, tensions, and trade-offs between the ethical frameworks."
+      - "Produce a balanced consensus statement that acknowledges the strongest arguments from each perspective."
+
+steps:
+  - id: deliberation
+    kind: council
+    council: ethics_council

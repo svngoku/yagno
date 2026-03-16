@@ -1,0 +1,162 @@
+id: finance_mission
+name: Finance Market Intelligence Mission
+description: >
+  A multi-milestone mission that gathers live market intelligence, analyses
+  key assets, and validates the findings before producing an investment brief.
+
+goal: >
+  Produce a structured, factually grounded market intelligence brief covering
+  selected equities, top cryptocurrencies, and a key SEC filing — with each
+  section verified for data completeness and accuracy.
+
+# ── Orchestrator ──────────────────────────────────────────────────────────
+orchestrator:
+  model: openrouter:z-ai/glm-5-turbo
+  carry_context: true
+  context_summary_chars: 1200  # max chars per feature output in the inter-milestone summary
+  instructions:
+    - >
+      You are the mission orchestrator. Carry the most important numerical
+      facts and conclusions forward to the next milestone's workers so they
+      can build on completed work instead of repeating it.
+
+# ── Workers ───────────────────────────────────────────────────────────────
+workers:
+  market_analyst:
+    model: openrouter:z-ai/glm-5-turbo
+    tools: [stock_quote, financial_news, sec_filing]
+    instructions:
+      - >
+        You are a senior equity market analyst. Use the available tools to
+        retrieve live data, then produce a concise, structured markdown report.
+        Always include the data source and timestamp of the data you cite.
+      - >
+        When reporting SEC filings, ensure you include the company name, 
+        the specific filing type (e.g., 10-K), and the exact filing date.
+        Do not truncate the section; ensure all requested details are fully present.
+    markdown: true
+    tool_call_limit: 10
+
+  crypto_analyst:
+    model: openrouter:z-ai/glm-5-turbo
+    tools: [crypto_price, financial_news]
+    instructions:
+      - >
+        You are a cryptocurrency market analyst. Use the tools to get live
+        prices and recent news for the specified assets, then produce a concise
+        structured markdown section. Include price, 24h change, market cap.
+    markdown: true
+    tool_call_limit: 8
+
+  brief_writer:
+    model: openrouter:z-ai/glm-5-turbo
+    tools: []
+    instructions:
+      - >
+        You are an investment brief writer. Synthesise the provided research
+        sections into a single, well-structured investment brief (≤ 500 words).
+        Use clear headings: Executive Summary, Equities, Crypto, Regulatory,
+        Risks & Opportunities, Conclusion.
+    markdown: true
+
+# ── Validators ────────────────────────────────────────────────────────────
+validators:
+  data_completeness_validator:
+    model: openrouter:z-ai/glm-5-turbo
+    criteria:
+      - Each equity section contains a current price and a 24h % change.
+      - The SEC filing section names the company and includes a filing date.
+      - The crypto section contains at least one coin price and 24h change.
+      - No section is left empty or contains placeholder text like "N/A".
+
+  brief_quality_validator:
+    model: openrouter:z-ai/glm-5-turbo
+    criteria:
+      - The brief has all five sections (Equities, Crypto, Regulatory, Risks, Conclusion).
+      - The brief does not exceed 600 words.
+      - At least one concrete recommendation or outlook is provided.
+
+# ── Tools ─────────────────────────────────────────────────────────────────
+tools:
+  - id: stock_quote
+    kind: callable
+    entrypoint: yagno.tools.finance.get_stock_quote
+
+  - id: financial_news
+    kind: callable
+    entrypoint: yagno.tools.finance.get_financial_news
+
+  - id: sec_filing
+    kind: callable
+    entrypoint: yagno.tools.finance.get_sec_filing
+
+  - id: crypto_price
+    kind: callable
+    entrypoint: yagno.tools.finance.get_crypto_price
+
+# ── Features ──────────────────────────────────────────────────────────────
+features:
+  # Milestone 1: Data gathering
+  - id: equity_research
+    name: Equity Research
+    description: >
+      Retrieve and summarise live market data for Apple (AAPL), NVIDIA (NVDA),
+      and Microsoft (MSFT). For each ticker include: current price, daily %
+      change, 52-week range, market cap, and latest 2 news headlines.
+      Also fetch the most recent 10-K filing for MSFT, ensuring the
+      summary includes the company name, filing type, and filing date.
+    worker: market_analyst
+    success_criteria:
+      - Current price and daily change retrieved for AAPL, NVDA, and MSFT.
+      - At least 2 recent news articles listed per ticker.
+      - MSFT 10-K filing date and EDGAR URL included.
+    max_retries: 1
+
+  - id: crypto_research
+    name: Crypto Research
+    description: >
+      Retrieve live prices and 24h stats for Bitcoin (BTC), Ethereum (ETH),
+      and Solana (SOL). Include market cap and 24h trading volume for each.
+      Fetch the 3 most recent news articles for Bitcoin.
+    worker: crypto_analyst
+    success_criteria:
+      - Live USD price and 24h % change for BTC, ETH, and SOL.
+      - Market cap and 24h volume for each asset.
+      - At least 2 recent BTC news articles.
+    max_retries: 1
+
+  # Milestone 2: Synthesis
+  - id: investment_brief
+    name: Investment Brief
+    description: >
+      Using the equity and crypto research provided as context, write a
+      structured investment brief of ≤ 500 words covering: Executive Summary,
+      Equities, Crypto, Regulatory (MSFT SEC filing), Risks & Opportunities,
+      and Conclusion with a directional market outlook.
+    worker: brief_writer
+    success_criteria:
+      - All five required sections present.
+      - Concrete market outlook or recommendation stated in Conclusion.
+      - Brief is under 600 words.
+    max_retries: 1
+
+# ── Milestones ────────────────────────────────────────────────────────────
+milestones:
+  - id: data_gathering
+    name: Data Gathering
+    description: Collect live market data for equities and crypto assets.
+    features:
+      - equity_research
+      - crypto_research
+    validator: data_completeness_validator
+    max_validation_retries: 1
+
+  - id: synthesis
+    name: Brief Synthesis
+    description: >
+      Synthesise gathered data into an investment brief and validate its
+      quality and completeness.
+    features:
+      - investment_brief
+    validator: brief_quality_validator
+    max_validation_retries: 1
