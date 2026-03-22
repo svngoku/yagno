@@ -1,0 +1,68 @@
+# ─────────────────────────────────────────────────────────────────
+#  Yagno — Docker Compose
+#
+#  Usage:
+#    docker compose up -d postgres        # start the database
+#    docker compose run --rm yagno run specs/simple_researcher.yaml -i '"Hello"'
+#    docker compose up yagno-server       # long-running API mode
+# ─────────────────────────────────────────────────────────────────
+services:
+  # ── PostgreSQL for session persistence ────────────────────────
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-yagno}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-yagno}
+      POSTGRES_DB: ${POSTGRES_DB:-yagno}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-yagno}"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ── Yagno CLI runner (one-shot) ───────────────────────────────
+  yagno:
+    build:
+      context: .
+      args:
+        INSTALL_EXTRAS: all
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-yagno}:${POSTGRES_PASSWORD:-yagno}@postgres:5432/${POSTGRES_DB:-yagno}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      # Mount specs and prompts so you can iterate without rebuilding
+      - ./specs:/app/specs:ro
+      - ./prompts:/app/prompts:ro
+
+  # ── Yagno API server (long-running) ──────────────────────────
+  yagno-server:
+    build:
+      context: .
+      args:
+        INSTALL_EXTRAS: all
+    command: ["run", "--background", "specs/research_team_with_sandbox.yaml"]
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-yagno}:${POSTGRES_PASSWORD:-yagno}@postgres:5432/${POSTGRES_DB:-yagno}
+    ports:
+      - "${YAGNO_PORT:-8000}:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./specs:/app/specs:ro
+      - ./prompts:/app/prompts:ro
+    restart: unless-stopped
+
+volumes:
+  pgdata:

@@ -1,0 +1,38 @@
+# Version control
+.git
+.gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+wheels/
+.venv/
+.yagno/
+
+# Environment / secrets
+.env
+.env.*
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.claude/
+.pi/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Database files
+*.db
+tmp/
+
+# Docker
+Dockerfile
+docker-compose*.yml
+.dockerignore
