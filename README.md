@@ -25,7 +25,7 @@ You get everything Agno offers — structured outputs, RAG, MCP tools, Daytona s
 - **Background deployment** via AgentOS for 24/7 agents
 - **Reference resolution** (`${input.topic}`, `${session_state.X}`, `${env.DB_URL}`)
 - **Robust error handling** — descriptive errors for bad YAML, schema mismatches, and missing files
-- **Security-aware imports** — optional allowlist for tool entrypoints
+- **Security guardrails by default** — import/env allowlists, path checks, MCP safety filters
 
 ## Quick Start
 
@@ -205,7 +205,7 @@ tools:
     max_tokens: 6000
     include_answer: true
     include_images: false
-    # api_key: ...            # defaults to TAVILY_API_KEY env var
+    api_key_env: MY_TAVILY_KEY   # optional; defaults to TAVILY_API_KEY
 ```
 
 ## Finance Tools
@@ -511,21 +511,65 @@ agents:
 
 ## Security
 
-### Tool entrypoint imports
+### Security defaults
 
-The `callable` tool kind uses `entrypoint` to import a Python function by dotted path. This is powerful but means YAML specs can execute arbitrary code. **Only load specs you trust.**
+Yagno now enforces practical guardrails by default:
 
-For hardened deployments, you can restrict imports to a known set of packages by editing `yagno/registry.py`:
+- **Callable import allowlist**: `callable` tool entrypoints are limited to `yagno` and `agno` packages unless extended.
+- **Env expression allowlist**: `${env:...}` references are validated against an allowlist.
+- **Prompt path restrictions**: `prompt_file` must resolve inside the spec directory (or configured allowed base); path traversal is blocked.
+- **MCP safety filters**: unsafe shell metacharacters in MCP server `command` values are blocked; dangerous env vars are rejected.
+- **Tavily key handling**: inline `api_key` is deprecated/blocked; use `api_key_env` (or default `TAVILY_API_KEY`).
 
-```python
-# Default: no restrictions
-_ALLOWED_PACKAGES: set[str] | None = None
+These defaults are designed to keep YAML specs portable while reducing high-risk misconfiguration.
 
-# Hardened: only allow yagno and agno packages
-_ALLOWED_PACKAGES: set[str] | None = {"yagno", "agno"}
+### Tool entrypoint import allowlist
+
+The `callable` tool kind imports Python functions by dotted `entrypoint`. By default, only these top-level packages are allowed:
+
+- `yagno`
+- `agno`
+
+To allow additional packages, set `YAGNO_ALLOWED_PACKAGES` as a comma-separated list:
+
+```bash
+export YAGNO_ALLOWED_PACKAGES="yagno,agno,my_project_tools"
 ```
 
-When the allowlist is active, any `entrypoint` referencing a package outside the set will raise an `ImportError` at load time.
+If an entrypoint resolves to a package outside the allowlist, Yagno fails fast during validation/compile with an import error.
+
+### Env expression allowlist (`${env:*}`)
+
+Environment references in expressions (for example `${env:DATABASE_URL}`) are checked against an allowlist.
+
+To extend the allowed env var names, set:
+
+```bash
+export YAGNO_ALLOWED_ENV_VARS="DATABASE_URL,OPENAI_API_KEY,MY_CUSTOM_KEY"
+```
+
+Use this to explicitly permit project-specific secrets/config keys in specs.
+
+### Prompt file path restrictions
+
+`prompt_file` paths are normalized and must stay within the spec directory (or other configured allowed base). Path traversal attempts such as `../` escapes are blocked.
+
+Recommended pattern:
+
+```yaml
+agents:
+  - id: researcher
+    prompt_file: prompts/researcher.md
+```
+
+### MCP command/env restrictions
+
+For `mcp_servers` config, Yagno applies safety checks:
+
+- blocks dangerous shell metacharacters in `command`
+- blocks dangerous environment variable names/overrides in MCP env config
+
+Use simple executable-style commands and explicit, non-sensitive env wiring.
 
 ## Error Handling
 
@@ -538,7 +582,7 @@ Yagno provides clear, contextual error messages at every stage:
 | Schema validation | Missing/invalid fields | `Schema validation error in 'specs/bad.yaml': ...` |
 | Tool import | Bad entrypoint | `Module 'myapp.tools' has no attribute 'search' (from 'myapp.tools.search')` |
 | Tool import | No dot in path | `Cannot import 'search': expected a dotted path like 'pkg.module.func'` |
-| Prompt file | File missing | `WARNING: Prompt file 'prompts/missing.md' not found — skipping.` |
+| Prompt file | File missing or blocked path | `Prompt file 'prompts/missing.md' not found` / `Prompt path escapes allowed base` |
 | Team resolution | Unknown member | `WARNING: Team member 'ghost' not found (not an agent or team) for team 'my_team'` |
 | Knowledge | Multiple listed | `WARNING: Agent 'x' lists 3 knowledge bases; only the first ('kb1') will be used.` |
 
@@ -579,11 +623,13 @@ yagno run <spec>               # run a workflow
   --background                 # run as AgentOS service
   --async                      # use async execution
   --no-stream                  # disable streaming
+  --no-guardrails              # disable runtime guardrails (not recommended)
   --debug                      # verbose event logging
 
-yagno validate <spec>          # validate a workflow YAML spec
+yagno validate <spec>          # validate + schema + deep compile/setup checks
 
 yagno mission run <spec>       # run a mission
+  --no-guardrails              # disable runtime guardrails (not recommended)
   --debug                      # verbose logging
 
 yagno mission validate <spec>  # validate a mission YAML spec
