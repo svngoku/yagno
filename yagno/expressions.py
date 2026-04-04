@@ -9,9 +9,29 @@ Supports:
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 from typing import Any
+
+_logger = logging.getLogger(__name__)
+
+_ALLOWED_ENV_VARS: set[str] = {
+    "DATABASE_URL",
+    "OPENROUTER_API_KEY",
+    "OPENAI_API_KEY",
+    "ANTHROPIC_API_KEY",
+    "GOOGLE_API_KEY",
+    "TAVILY_API_KEY",
+    "DAYTONA_API_KEY",
+    "DAYTONA_TARGET",
+    "EDGAR_USER_AGENT",
+}
+
+# Extend via env var (comma-separated)
+_extra_env = os.environ.get("YAGNO_ALLOWED_ENV_VARS", "")
+if _extra_env:
+    _ALLOWED_ENV_VARS.update(v.strip() for v in _extra_env.split(",") if v.strip())
 
 _REF_PATTERN = re.compile(r"\$\{([^}]+)\}")
 
@@ -20,7 +40,20 @@ def _resolve_single(expr: str, context: dict[str, Any]) -> Any:
     """Resolve a single ${...} expression."""
     if expr.startswith("env:") or expr.startswith("env."):
         env_key = expr[4:]
-        return os.getenv(env_key, "")
+        if env_key not in _ALLOWED_ENV_VARS:
+            raise ValueError(
+                f"Environment variable '{env_key}' not in allowlist. "
+                f"Allowed: {sorted(_ALLOWED_ENV_VARS)}. "
+                f"Set YAGNO_ALLOWED_ENV_VARS to extend."
+            )
+        value = os.getenv(env_key)
+        if value is None:
+            _logger.warning(
+                "Environment variable '%s' is in allowlist but not set — resolving to empty string.",
+                env_key,
+            )
+            return ""
+        return value
 
     parts = expr.split(".")
     cur: Any = context

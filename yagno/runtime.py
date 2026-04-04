@@ -44,7 +44,7 @@ class YagnoRuntime:
                 f"Schema validation error in '{workflow_path}':\n{exc}"
             ) from exc
 
-        self.workflow = compile_workflow(self.spec)
+        self.workflow = compile_workflow(self.spec, base_dir=path.parent.resolve())
 
     def run(
         self,

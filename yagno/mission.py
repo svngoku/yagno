@@ -239,11 +239,12 @@ def _build_worker_agent(
     tool_registry: dict[str, Any],
     mcp_registry: dict[str, MCPSpec],
     name: str = "worker",
+    base_dir: Path | None = None,
 ) -> Any:
     """Compile a MissionWorkerSpec into a fresh Agno Agent (no persistence)."""
     from agno.agent import Agent
 
-    instructions = list(worker_spec.instructions) + load_prompt_file(worker_spec.prompt_file)
+    instructions = list(worker_spec.instructions) + load_prompt_file(worker_spec.prompt_file, base_dir=base_dir)
 
     tools: list[Any] = []
     for tid in worker_spec.tools:
@@ -274,6 +275,7 @@ def _build_worker_agent(
 def _build_validator_agent(
     validator_spec: MissionValidatorSpec,
     mission_goal: str,
+    base_dir: Path | None = None,
 ) -> Any:
     """Build a validator Agent whose system prompt embeds the criteria."""
     from agno.agent import Agent
@@ -285,7 +287,7 @@ def _build_validator_agent(
         pass_signal=_VALIDATION_PASS_SIGNAL,
         fail_signal=_VALIDATION_FAIL_SIGNAL,
     )
-    extra = list(validator_spec.instructions) + load_prompt_file(validator_spec.prompt_file)
+    extra = list(validator_spec.instructions) + load_prompt_file(validator_spec.prompt_file, base_dir=base_dir)
     if extra:
         system = system + "\n\n" + "\n".join(extra)
 
@@ -352,6 +354,7 @@ class MissionRuntime:
             ) from exc
 
         self._path = mission_path
+        self._base_dir = path.parent.resolve()
 
         # Index features for fast lookup
         self._features: dict[str, MissionFeatureSpec] = {
@@ -393,6 +396,7 @@ class MissionRuntime:
             self._tool_registry,
             self._mcp_registry,
             name=feat.name or feat.id,
+            base_dir=self._base_dir,
         )
 
         # Build the feature prompt
@@ -449,7 +453,7 @@ class MissionRuntime:
             # No validator defined → auto-pass
             return True, "No validator configured — auto-pass."
 
-        validator_agent = _build_validator_agent(validator_spec, self.spec.goal)
+        validator_agent = _build_validator_agent(validator_spec, self.spec.goal, base_dir=self._base_dir)
 
         feature_summary = "\n\n".join(
             f"[{fr.feature_name}]:\n{fr.content or '(no output)'}"
@@ -472,11 +476,12 @@ class MissionRuntime:
         orch_agent = _build_worker_agent(
             MissionWorkerSpec(
                 model=orch_spec.model,
-                instructions=list(orch_spec.instructions) + load_prompt_file(orch_spec.prompt_file),
+                instructions=list(orch_spec.instructions) + load_prompt_file(orch_spec.prompt_file, base_dir=self._base_dir),
             ),
             self._tool_registry,
             self._mcp_registry,
             name="orchestrator",
+            base_dir=self._base_dir,
         )
         max_chars = orch_spec.context_summary_chars
         outputs = "\n\n".join(

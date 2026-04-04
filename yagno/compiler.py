@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import os
+from pathlib import Path
 from typing import Any
 
 from agno.agent import Agent
@@ -150,8 +151,13 @@ def _build_tavily_tools(spec: ToolSpec) -> Any:
     """Build a TavilyTools instance from spec."""
     from agno.tools.tavily import TavilyTools
 
+    env_var = spec.api_key_env or "TAVILY_API_KEY"
+    api_key = os.getenv(env_var)
+    if not api_key:
+        logger.warning("Tavily API key not found in env var '%s'", env_var)
+
     return TavilyTools(
-        api_key=spec.api_key,
+        api_key=api_key,
         search_depth=spec.search_depth,
         max_tokens=spec.max_tokens,
         include_answer=spec.include_answer,
@@ -234,9 +240,10 @@ def _build_agent(
     mcp_registry: dict[str, MCPSpec],
     knowledge_dict: dict[str, Any],
     db: Any | None = None,
+    base_dir: Path | None = None,
 ) -> Agent:
     """Compile an AgentSpec into a live Agent."""
-    instructions = list(spec.instructions) + load_prompt_file(spec.prompt_file)
+    instructions = list(spec.instructions) + load_prompt_file(spec.prompt_file, base_dir=base_dir)
 
     # Resolve tools
     tools: list[Any] = []
@@ -307,6 +314,7 @@ def _build_agent(
 def _build_teams(
     specs: list[TeamSpec],
     agents: dict[str, Agent],
+    base_dir: Path | None = None,
 ) -> dict[str, Team]:
     """Build teams, resolving member references to agents or other teams.
 
@@ -328,7 +336,7 @@ def _build_teams(
                 # Could be another team — defer resolution to pass 2
                 unresolved.append(mid)
 
-        instructions = list(t.instructions) + load_prompt_file(t.prompt_file)
+        instructions = list(t.instructions) + load_prompt_file(t.prompt_file, base_dir=base_dir)
 
         team_kwargs: dict[str, Any] = {
             "name": t.name or t.id,
@@ -371,6 +379,7 @@ def _build_teams(
 def _build_councils(
     specs: list[CouncilSpec],
     agents: dict[str, Agent],
+    base_dir: Path | None = None,
 ) -> dict[str, Team]:
     """Build council Teams using broadcast mode for multi-round debate."""
     built: dict[str, Team] = {}
@@ -383,7 +392,7 @@ def _build_councils(
             else:
                 logger.warning("Council member '%s' not found for council '%s'", mid, c.id)
 
-        instructions = list(c.synthesizer_instructions) + load_prompt_file(c.synthesizer_prompt_file)
+        instructions = list(c.synthesizer_instructions) + load_prompt_file(c.synthesizer_prompt_file, base_dir=base_dir)
         if not instructions:
             instructions = [
                 "You are the council synthesizer. After reviewing all member perspectives "
@@ -476,7 +485,7 @@ def _build_steps(
 # Top-level: build the full Workflow
 # ---------------------------------------------------------------------------
 
-def compile_workflow(spec: WorkflowSpec) -> Workflow:
+def compile_workflow(spec: WorkflowSpec, base_dir: Path | None = None) -> Workflow:
     """Compile a full WorkflowSpec into a live Agno Workflow."""
     db = _build_db(spec)
 
@@ -496,15 +505,15 @@ def compile_workflow(spec: WorkflowSpec) -> Workflow:
 
     # Agents
     agents = {
-        a.id: _build_agent(a, tool_registry, mcp_registry, knowledge_dict, db)
+        a.id: _build_agent(a, tool_registry, mcp_registry, knowledge_dict, db, base_dir=base_dir)
         for a in spec.agents
     }
 
     # Teams
-    teams = _build_teams(spec.teams, agents)
+    teams = _build_teams(spec.teams, agents, base_dir=base_dir)
 
     # Councils (built as Teams, merged into the teams dict)
-    councils = _build_councils(spec.councils, agents)
+    councils = _build_councils(spec.councils, agents, base_dir=base_dir)
     all_teams = {**teams, **councils}
 
     # Steps
