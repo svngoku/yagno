@@ -2,22 +2,16 @@ id: research_team_sandbox
 name: Multi-Agent Research Team with Secure Sandbox
 description: >
   A coordinated team of agents: a researcher that gathers info
-  and a coder that validates findings via safe code execution.
-persistent: true
-background: false
-agentos_enabled: false
-
-db:
-  provider: postgres
-  url: "${env:DATABASE_URL}"
-  table_prefix: yagno
+  with Tavily search and a coder that validates findings via safe
+  code execution.
+persistent: false
 
 agents:
   - id: researcher
     name: Research Agent
     model: openrouter:openai/gpt-4.1-mini
     role: Research specialist who gathers and synthesizes information
-    tools: [web_search]
+    tools: [tavily_search]
     prompt_file: prompts/researcher.md
     retries: 3
     tool_call_limit: 10
@@ -37,7 +31,7 @@ teams:
     name: Research & Validation Team
     role: Coordinate research and safe code validation
     mode: coordinate
-    model: openrouter:openai/gpt-5.4
+    model: openrouter:openai/gpt-4.1-mini
     members: [researcher, coder]
     instructions:
       - "Delegate research to the researcher agent first."
@@ -45,9 +39,9 @@ teams:
       - "Synthesize both outputs into a final answer."
 
 tools:
-  - id: web_search
-    kind: callable
-    entrypoint: yagno.tools.web.web_search
+  - id: tavily_search
+    kind: tavily
+    api_key_env: TAVILY_API_KEY
 
   - id: sandbox
     kind: sandbox
